@@ -1,112 +1,62 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
-  <meta charset="UTF-8">
-  <title>NLWeb Voice Attribute Search</title>
+  <meta charset="UTF-8" />
+  <title>NLWeb 人車屬性語音搜尋</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 40px;
-      background-color: #f7f9fb;
-    }
-    #results {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      margin-top: 30px;
-    }
-    .result-card {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      width: 200px;
-      padding: 10px;
-    }
-    .result-card img {
-      width: 100%;
-      border-radius: 8px;
-    }
-    .transcript {
-      margin-top: 20px;
-      font-size: 16px;
-      color: #333;
-    }
+    body { font-family: sans-serif; padding: 2em; }
+    #result { white-space: pre; border: 1px solid #ccc; padding: 1em; margin-top: 1em; background: #f9f9f9; }
+    button { padding: 0.5em 1em; margin-right: 1em; }
   </style>
 </head>
 <body>
-  <h1>🔍 VIVOTEK NVR - 人車屬性語音搜尋</h1>
-  <button id="recordBtn">🎤 開始語音輸入</button>
-  <div class="transcript" id="transcript">等待語音輸入...</div>
-  <div id="results"></div>
+  <h1>語音搜尋人車屬性</h1>
+  <button onclick="startRecognition()">🎙 開始語音</button>
+  <div id="result">語意結果會顯示在這裡</div>
 
   <script>
-    const recordBtn = document.getElementById("recordBtn");
-    const transcriptEl = document.getElementById("transcript");
-    const resultsEl = document.getElementById("results");
+    const resultDiv = document.getElementById("result");
 
-    let recognition;
-    if ("webkitSpeechRecognition" in window) {
-      recognition = new webkitSpeechRecognition();
+    function startRecognition() {
+      const recognition = new(window.SpeechRecognition || window.webkitSpeechRecognition)();
       recognition.lang = "zh-TW";
-      recognition.continuous = false;
       recognition.interimResults = false;
 
-      recognition.onresult = function (event) {
+      recognition.onresult = async function(event) {
         const text = event.results[0][0].transcript;
-        transcriptEl.innerText = "辨識內容: " + text;
-        callNLUAPI(text);
+        const response = await fetch("https://your-glitch-project.glitch.me/api/v1/nlu", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+        const nlu = await response.json();
+
+        const structured = generateStructuredJSON(nlu.intent, nlu.slots);
+        resultDiv.textContent = JSON.stringify(structured, null, 2);
       };
 
-      recognition.onerror = function (event) {
-        transcriptEl.innerText = "錯誤: " + event.error;
-      };
-
-      recordBtn.onclick = () => {
-        transcriptEl.innerText = "🎙️ 正在聆聽...";
-        recognition.start();
-      };
-    } else {
-      alert("你的瀏覽器不支援語音辨識。");
+      recognition.start();
     }
 
-    function callNLUAPI(text) {
-      fetch("http://<nlweb-server>/api/v1/nlu", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ text })
-      })
-        .then((res) => res.json())
-        .then((nluResult) => {
-          console.log("NLU result:", nluResult);
-          searchNVR(nluResult);
-        });
-    }
+    function generateStructuredJSON(intent, slots) {
+      const defaultSlots = {
+        object: intent.includes("vehicle") ? "vehicle" : "person",
+        gender: null,
+        top_color: null,
+        bottom_color: null,
+        age: null,
+        accessory: null,
+        type: null,
+        color: null,
+        license_plate: null,
+        camera_id: null,
+        time_range: null
+      };
 
-    function searchNVR(query) {
-      fetch("http://<nvr-ip>/v1/search/attribute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(query)
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          resultsEl.innerHTML = "";
-          data.results.forEach((item) => {
-            const card = document.createElement("div");
-            card.className = "result-card";
-            card.innerHTML = `
-              <img src="${item.image_url}" alt="result" />
-              <p>時間: ${item.timestamp}</p>
-              <p>攝影機: ${item.camera_id}</p>
-              <p>信心分數: ${item.score}%</p>
-            `;
-            resultsEl.appendChild(card);
-          });
-        });
+      return {
+        intent,
+        slots: { ...defaultSlots, ...slots }
+      };
     }
   </script>
 </body>
