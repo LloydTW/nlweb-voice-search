@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NLWeb Voice Attribute Search</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      background-color: #f7f9fb;
+    }
+    #results {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 30px;
+    }
+    .result-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      width: 200px;
+      padding: 10px;
+    }
+    .result-card img {
+      width: 100%;
+      border-radius: 8px;
+    }
+    .transcript {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 VIVOTEK NVR - 人車屬性語音搜尋</h1>
+  <button id="recordBtn">🎤 開始語音輸入</button>
+  <div class="transcript" id="transcript">等待語音輸入...</div>
+  <div id="results"></div>
+
+  <script>
+    const recordBtn = document.getElementById("recordBtn");
+    const transcriptEl = document.getElementById("transcript");
+    const resultsEl = document.getElementById("results");
+
+    let recognition;
+    if ("webkitSpeechRecognition" in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = "zh-TW";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = function (event) {
+        const text = event.results[0][0].transcript;
+        transcriptEl.innerText = "辨識內容: " + text;
+        callNLUAPI(text);
+      };
+
+      recognition.onerror = function (event) {
+        transcriptEl.innerText = "錯誤: " + event.error;
+      };
+
+      recordBtn.onclick = () => {
+        transcriptEl.innerText = "🎙️ 正在聆聽...";
+        recognition.start();
+      };
+    } else {
+      alert("你的瀏覽器不支援語音辨識。");
+    }
+
+    function callNLUAPI(text) {
+      fetch("http://<nlweb-server>/api/v1/nlu", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text })
+      })
+        .then((res) => res.json())
+        .then((nluResult) => {
+          console.log("NLU result:", nluResult);
+          searchNVR(nluResult);
+        });
+    }
+
+    function searchNVR(query) {
+      fetch("http://<nvr-ip>/v1/search/attribute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(query)
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          resultsEl.innerHTML = "";
+          data.results.forEach((item) => {
+            const card = document.createElement("div");
+            card.className = "result-card";
+            card.innerHTML = `
+              <img src="${item.image_url}" alt="result" />
+              <p>時間: ${item.timestamp}</p>
+              <p>攝影機: ${item.camera_id}</p>
+              <p>信心分數: ${item.score}%</p>
+            `;
+            resultsEl.appendChild(card);
+          });
+        });
+    }
+  </script>
+</body>
+</html>
